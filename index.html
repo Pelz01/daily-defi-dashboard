@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeFi Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --bg: #0a0a0f;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #f0f0f5;
+      --text-dim: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --accent: #58a6ff;
+    }
+    
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    
+    .container { max-width: 500px; margin: 0 auto; }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    
+    .refresh-indicator {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .refresh-indicator.active {
+      color: var(--green);
+    }
+    
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .coin {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    
+    .coin img {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+    }
+    
+    .coin-info {
+      flex: 1;
+    }
+    
+    .coin-name {
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    
+    .coin-symbol {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+    
+    .coin-price {
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .price-value {
+      font-weight: 500;
+      font-size: 1rem;
+    }
+    
+    .price-change {
+      font-size: 0.75rem;
+    }
+    
+    .green { color: var(--green); }
+    .red { color: var(--red); }
+    
+    .footer {
+      margin-top: 1.5rem;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-dim);
+    }
+    
+    .error {
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>DeFi Dashboard</h1>
+      <div class="refresh-indicator" id="refreshIndicator">● Live</div>
+    </header>
+    
+    <div id="error"></div>
+    
+    <div class="card">
+      <div id="crypto">
+        <div class="loading">Loading prices...</div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      Auto-refreshes every 5 seconds · Data from CoinGecko
+    </div>
+  </div>
+  
+  <script>
+    const REFRESH_MS = 5000;
+    const COINGECKO_URL = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&sparkline=false';
+    
+    let prices = {};
+    
+    async function loadData() {
+      const cryptoDiv = document.getElementById('crypto');
+      const errorDiv = document.getElementById('error');
+      const indicator = document.getElementById('refreshIndicator');
+      
+      indicator.classList.add('active');
+      
+      try {
+        const res = await fetch(COINGECKO_URL);
+        
+        if (!res.ok) throw new Error('API limit');
+        
+        const data = await res.json();
+        
+        cryptoDiv.innerHTML = data.slice(0, 15).map((c, i) => {
+          const prevPrice = prices[c.id];
+          prices[c.id] = c.current_price;
+          
+          let changeClass = 'green';
+          let arrow = '▲';
+          let changeNum = c.price_change_percentage_24h;
+          
+          if (changeNum < 0) {
+            changeClass = 'red';
+            arrow = '▼';
+            changeNum = Math.abs(changeNum);
+          }
+          
+          // Flash animation for price changes
+          let flash = '';
+          if (prevPrice && prevPrice !== c.current_price) {
+            flash = prevPrice > c.current_price ? 'style="animation: flashRed 0.5s"' : 'style="animation: flashGreen 0.5s"';
+          }
+          
+          return `
+            <div class="coin" ${flash}>
+              <span style="width:20px;font-size:0.8rem;color:var(--text-dim)">${i+1}</span>
+              <img src="${c.image}" alt="${c.symbol}">
+              <div class="coin-info">
+                <div class="coin-name">${c.name}</div>
+                <div class="coin-symbol">${c.symbol.toUpperCase()}</div>
+              </div>
+              <div class="coin-price">
+                <div class="price-value">$${c.current_price >= 1 ? c.current_price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : c.current_price.toFixed(6)}</div>
+                <div class="price-change ${changeClass}">${arrow} ${changeNum.toFixed(2)}%</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+        
+        errorDiv.innerHTML = '';
+        
+      } catch (e) {
+        if (!errorDiv.innerHTML) {
+          errorDiv.innerHTML = '<div class="error">API limit - showing cached prices</div>';
+        }
+      }
+      
+      setTimeout(() => indicator.classList.remove('active'), 500);
+    }
+    
+    // Load immediately then every 5 seconds
+    loadData();
+    setInterval(loadData, REFRESH_MS);
+  </script>
+  
+  <style>
+    @keyframes flashGreen {
+      0%, 100% { background: transparent; }
+      50% { background: rgba(63, 185, 80, 0.2); }
+    }
+    @keyframes flashRed {
+      0%, 100% { background: transparent; }
+      50% { background: rgba(248, 81, 73, 0.2); }
+    }
+  </style>
+</body>
+</html>
